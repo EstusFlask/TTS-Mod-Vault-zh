@@ -1,0 +1,79 @@
+name: Build macOS and Linux distribution ZIPs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pr
+    paths:
+      - ".github/workflows/build-distribution-zips.yml"
+      - "packaging/linux/build_zip.sh"
+      - "packaging/macos/build_zip.sh"
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.44.4"
+
+jobs:
+  linux-x64:
+    name: Linux x64 ZIP
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev zip
+
+      - name: Install Flutter
+        run: |
+          git clone --branch "$FLUTTER_VERSION" --depth 1 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Build distribution ZIP
+        id: package
+        run: |
+          bash packaging/linux/build_zip.sh
+          zip_path="$(find build/distributions -maxdepth 1 -name '*-linux-x64.zip' -print -quit)"
+          echo "zip=$zip_path" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$zip_path" .zip)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux ZIP
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+          compression-level: 0
+
+  macos-universal:
+    name: macOS universal ZIP
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Flutter
+        run: |
+          git clone --branch "$FLUTTER_VERSION" --depth 1 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Build distribution ZIP
+        id: package
+        run: |
+          bash packaging/macos/build_zip.sh
+          zip_path="$(find build/distributions -maxdepth 1 -name '*-macos-universal.zip' -print -quit)"
+          echo "zip=$zip_path" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$zip_path" .zip)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS ZIP
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+          compression-level: 0
