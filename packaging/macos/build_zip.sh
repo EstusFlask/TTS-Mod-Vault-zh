@@ -11,6 +11,11 @@ ARCH="universal"
 ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 cd "$ROOT"
 
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "ERROR: this script must run on macOS"
+  exit 1
+fi
+
 if command -v fvm >/dev/null 2>&1; then
   FLUTTER=(fvm flutter)
 else
@@ -38,16 +43,8 @@ APP="build/macos/Build/Products/Release/${APP_NAME}.app"
 }
 
 ACTUAL_ARCHS="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
-case " $ACTUAL_ARCHS " in
-  *" x86_64 "*" arm64 "*) ;;
-  *)
-    echo "ERROR: expected a universal x86_64 + arm64 executable, got: $ACTUAL_ARCHS"
-    exit 1
-    ;;
-esac
-
-if [ "$(uname -s)" != "Darwin" ]; then
-  echo "ERROR: this script must run on macOS"
+if [[ " $ACTUAL_ARCHS " != *" x86_64 "* || " $ACTUAL_ARCHS " != *" arm64 "* ]]; then
+  echo "ERROR: expected a universal x86_64 + arm64 executable, got: $ACTUAL_ARCHS"
   exit 1
 fi
 
