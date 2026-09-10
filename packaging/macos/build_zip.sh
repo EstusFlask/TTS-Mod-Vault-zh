@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Build and package the Flutter macOS app as a ZIP distribution.
+# Run on Apple Silicon macOS: bash packaging/macos/build_zip.sh
+
+set -euo pipefail
+
+APP_NAME="TTS Mod Vault"
+APP_SLUG="TTS-Mod-Vault-zh"
+ARCH="arm64"
+
+ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if command -v fvm >/dev/null 2>&1; then
+  FLUTTER=(fvm flutter)
+else
+  FLUTTER=(flutter)
+fi
+
+VERSION="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml | head -1)"
+[ -n "$VERSION" ] || { echo "ERROR: could not read version from pubspec.yaml"; exit 1; }
+
+DIST_NAME="${APP_SLUG}-${VERSION}-macos-${ARCH}"
+DIST_ROOT="build/distributions"
+OUT_ZIP="$DIST_ROOT/$DIST_NAME.zip"
+
+echo "==> building $DIST_NAME"
+if [ "${SKIP_CLEAN:-0}" != "1" ]; then
+  "${FLUTTER[@]}" clean >/dev/null
+fi
+"${FLUTTER[@]}" build macos --release
+
+APP="build/macos/Build/Products/Release/${APP_NAME}.app"
+[ -d "$APP" ] || { echo "ERROR: built app not found at $APP"; exit 1; }
+[ -e "$APP/Contents/Frameworks/pdfium.framework/pdfium" ] || {
+  echo "ERROR: pdfium.framework is missing from the macOS app"
+  exit 1
+}
+
+ACTUAL_ARCH="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
+[ "$ACTUAL_ARCH" = "$ARCH" ] || {
+  echo "ERROR: expected $ARCH executable, got: $ACTUAL_ARCH"
+  exit 1
+}
+
+echo "==> verifying code signature"
+codesign --verify --deep --strict --verbose=2 "$APP"
+
+mkdir -p "$DIST_ROOT"
+rm -f "$OUT_ZIP"
+# ditto preserves the .app bundle's symlinks, metadata, and executable modes.
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT_ZIP"
+
+echo "==> verifying archive"
+unzip -tq "$OUT_ZIP"
+
+echo "==> done: $OUT_ZIP"
+echo "    This build is ad-hoc signed and not notarized."
+
