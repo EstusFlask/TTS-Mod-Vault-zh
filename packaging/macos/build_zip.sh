@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Build and package the Flutter macOS app as a ZIP distribution.
-# Run on Apple Silicon macOS: bash packaging/macos/build_zip.sh
+# Run on macOS: bash packaging/macos/build_zip.sh
 
 set -euo pipefail
 
 APP_NAME="TTS Mod Vault"
 APP_SLUG="TTS-Mod-Vault-zh"
-ARCH="arm64"
+ARCH="universal"
 
 ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 cd "$ROOT"
@@ -37,11 +37,19 @@ APP="build/macos/Build/Products/Release/${APP_NAME}.app"
   exit 1
 }
 
-ACTUAL_ARCH="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
-[ "$ACTUAL_ARCH" = "$ARCH" ] || {
-  echo "ERROR: expected $ARCH executable, got: $ACTUAL_ARCH"
+ACTUAL_ARCHS="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
+case " $ACTUAL_ARCHS " in
+  *" x86_64 "*" arm64 "*) ;;
+  *)
+    echo "ERROR: expected a universal x86_64 + arm64 executable, got: $ACTUAL_ARCHS"
+    exit 1
+    ;;
+esac
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "ERROR: this script must run on macOS"
   exit 1
-}
+fi
 
 echo "==> verifying code signature"
 codesign --verify --deep --strict --verbose=2 "$APP"
@@ -56,4 +64,3 @@ unzip -tq "$OUT_ZIP"
 
 echo "==> done: $OUT_ZIP"
 echo "    This build is ad-hoc signed and not notarized."
-
